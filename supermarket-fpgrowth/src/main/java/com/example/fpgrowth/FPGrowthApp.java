@@ -33,40 +33,61 @@ public class FPGrowthApp {
 
                 FPGrowthModel model = fpGrowth.fit(df);
 
-                // 显示频繁项集，false参数防止截断，完整显示
+                // 显示结果
                 System.out.println("Frequent Itemsets:");
                 model.freqItemsets().show(false);
-
-                // 显示根据频繁项集生成的关联规则
                 System.out.println("Association Rules:");
                 model.associationRules().show(false);
-
-                // 预测每个交易可能出现的后续商品，展示transform结果
                 System.out.println("Transform:");
                 model.transform(df).show(false);
 
-                // 保存频繁项集到文件
+                // 保存为 JSON 文件
                 String freqItemsetsStr = model.freqItemsets().toJSON().collectAsList().toString();
                 try (FileWriter fw = new FileWriter(outputDir + "/freqItemsets.json")) {
                         fw.write(freqItemsetsStr);
                 }
 
-                // 保存关联规则到文件
                 String assocRulesStr = model.associationRules().toJSON().collectAsList().toString();
                 try (FileWriter fw = new FileWriter(outputDir + "/associationRules.json")) {
                         fw.write(assocRulesStr);
                 }
 
-                // 保存预测结果到文件
                 String transformStr = model.transform(df).toJSON().collectAsList().toString();
                 try (FileWriter fw = new FileWriter(outputDir + "/transform.json")) {
                         fw.write(transformStr);
                 }
+
+                // 使用 SparkSQL 处理频繁项集（频率 >= 10），按频率降序排序
+                model.freqItemsets().createOrReplaceTempView("freq_itemsets");
+                Dataset<Row> filteredFreq = spark
+                                .sql("SELECT * FROM freq_itemsets WHERE freq >= 10 ORDER BY freq DESC");
+
+                System.out.println("Filtered Frequent Itemsets (freq >= 10):");
+                filteredFreq.show(false);
+
+                // 保存筛选后的频繁项集为 JSON 文件（单一文件）
+                String filteredFreqStr = filteredFreq.toJSON().collectAsList().toString();
+                try (FileWriter fw = new FileWriter(outputDir + "/filtered_freqItemsets.json")) {
+                        fw.write(filteredFreqStr);
+                }
+
+                // 使用 SparkSQL 处理关联规则（置信度 >= 0.8），按置信度降序排序
+                model.associationRules().createOrReplaceTempView("association_rules");
+                Dataset<Row> filteredRules = spark
+                                .sql("SELECT * FROM association_rules WHERE confidence >= 0.8 ORDER BY confidence DESC");
+
+                System.out.println("Filtered Association Rules (confidence >= 0.8):");
+                filteredRules.show(false);
+
+                // 保存筛选后的关联规则为 JSON 文件（单一文件）
+                String filteredRulesStr = filteredRules.toJSON().collectAsList().toString();
+                try (FileWriter fw = new FileWriter(outputDir + "/filtered_associationRules.json")) {
+                        fw.write(filteredRulesStr);
+                }
+
                 System.out.println("Results saved to " + outputDir);
-                // 关闭Spark会话
                 System.out.println("Analysis completed successfully.");
                 System.out.println("Spark session stopped.");
-
                 spark.stop();
         }
 }
